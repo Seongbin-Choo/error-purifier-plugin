@@ -10,7 +10,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Persists only the server-issued installation UUID in the IDE configuration directory. */
 public final class DeviceAuthManager {
 
     private static final Path DEVICE_FILE = Path.of(PathManager.getConfigPath(), "error-purifier", "device-uuid");
@@ -49,9 +48,7 @@ public final class DeviceAuthManager {
     private static void deleteInvalidFile() {
         try {
             Files.deleteIfExists(DEVICE_FILE);
-        } catch (IOException ignored) {
-            // The next sync still requests a server-issued UUID without depending on this file.
-        }
+        } catch (IOException ignored) { }
         cachedUuid = null;
     }
 }

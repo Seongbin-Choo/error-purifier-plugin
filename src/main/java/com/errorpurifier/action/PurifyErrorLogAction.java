@@ -72,17 +72,26 @@ public class PurifyErrorLogAction extends AnAction {
                     showToolWindow(project, panel -> panel.appendStreamingText(delta));
                 });
                 Map<String, String> evidenceLines = extractEvidenceLines(response.preparedPrompt(), answer.toString());
-                long usageId = apiService.reportUsage(response, provider, model, result, java.util.List.copyOf(evidenceLines.keySet()), 0);
-                showToolWindow(project, panel -> panel.finishStreaming(result, evidenceLines, response.logTruncated(),
-                        response.appliedRuleCounts(), response.protectedLineCount(), (rating, resolved) ->
-                        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+                Long usageId = null;
+                String usageError = null;
+                try {
+                    usageId = apiService.reportUsage(response, provider, model, result, java.util.List.copyOf(evidenceLines.keySet()), 0);
+                } catch (Exception exception) {
+                    usageError = exception.getMessage();
+                }
+                Long finalUsageId = usageId;
+                java.util.function.BiConsumer<Integer, Boolean> feedbackHandler = finalUsageId == null ? null :
+                        (rating, resolved) -> ApplicationManager.getApplication().executeOnPooledThread(() -> {
                             try {
-                                apiService.reportFeedback(usageId, rating, resolved);
+                                apiService.reportFeedback(finalUsageId, rating, resolved);
                                 showToolWindow(project, ErrorPurifierToolWindowFactory.ErrorPurifierPanel::showFeedbackSaved);
                             } catch (Exception feedbackError) {
                                 showToolWindow(project, p -> p.showFeedbackError(feedbackError.getMessage()));
                             }
-                        }), feedbackType -> ApplicationManager.getApplication().executeOnPooledThread(() -> {
+                        });
+                showToolWindow(project, panel -> panel.finishStreaming(result, evidenceLines, response.logTruncated(),
+                        response.appliedRuleCounts(), response.protectedLineCount(), feedbackHandler,
+                        feedbackType -> ApplicationManager.getApplication().executeOnPooledThread(() -> {
                             try {
                                 apiService.reportRefinementFeedback(response, feedbackType);
                                 showToolWindow(project, ErrorPurifierToolWindowFactory.ErrorPurifierPanel::showRefinementFeedbackSaved);
@@ -91,6 +100,10 @@ public class PurifyErrorLogAction extends AnAction {
                             }
                         })
                 ));
+                if (usageError != null) {
+                    String finalUsageError = usageError;
+                    showToolWindow(project, panel -> panel.showUsageReportError(finalUsageError));
+                }
             } catch (Exception exception) {
                 ApplicationManager.getApplication().invokeLater(() ->
                         Messages.showErrorDialog(project, "프롬프트 정제 요청에 실패했습니다.\n" + exception.getMessage(), "AI Error Purifier")
@@ -99,7 +112,6 @@ public class PurifyErrorLogAction extends AnAction {
         });
     }
 
-    /** Keeps only citations that refer to a numbered line which was actually sent to the LLM. */
     private Map<String, String> extractEvidenceLines(String preparedPrompt, String answer) {
         Map<String, String> promptLines = new LinkedHashMap<>();
         java.util.regex.Matcher promptMatcher = java.util.regex.Pattern

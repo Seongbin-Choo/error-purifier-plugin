@@ -154,7 +154,7 @@ public class ErrorPurifierToolWindowFactory implements ToolWindowFactory {
             copyButton.setText("답변 복사");
             this.feedbackHandler = feedbackHandler;
             this.refinementFeedbackHandler = refinementFeedbackHandler;
-            setFeedbackButtonsEnabled(true);
+            setFeedbackButtonsEnabled(feedbackHandler != null);
             setRefinementFeedbackButtonsEnabled(true);
         }
 
@@ -188,6 +188,11 @@ public class ErrorPurifierToolWindowFactory implements ToolWindowFactory {
         public void showFeedbackError(String message) {
             statusLabel.setText("피드백 저장 실패: " + message);
             statusLabel.setForeground(Color.RED);
+        }
+
+        public void showUsageReportError(String message) {
+            statusLabel.setText("분석 완료 · 사용량 저장 실패: " + message);
+            statusLabel.setForeground(new Color(180, 120, 20));
         }
 
         private void loadUsageSummary() {

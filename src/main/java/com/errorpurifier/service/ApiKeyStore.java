@@ -6,7 +6,6 @@ import com.intellij.ide.passwordSafe.PasswordSafe;
 
 import java.util.Optional;
 
-/** Keeps provider API keys in the IDE credential store, never in project files or the backend. */
 public final class ApiKeyStore {
     private static final String SERVICE_PREFIX = "AI Error Purifier/";
 

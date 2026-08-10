@@ -99,7 +99,6 @@ public class ApiService {
         post("/refinement-feedback", body, ensureRegisteredDevice());
     }
 
-    /** Returns aggregates for this installation only; no raw logs, answers, or API keys are returned. */
     public UsageSummary getUsageSummary() throws Exception {
         JsonObject response = get("/usage/summary", ensureRegisteredDevice());
         return new UsageSummary(
@@ -116,10 +115,9 @@ public class ApiService {
         try {
             return syncDevice(existingId);
         } catch (ApiException exception) {
-            if (existingId.isBlank()) {
+            if (existingId.isBlank() || (exception.statusCode != 401 && exception.statusCode != 404)) {
                 throw exception;
             }
-            // A removed server record or a copied/corrupt installation gets a new server-issued UUID.
             return syncDevice("");
         }
     }
@@ -161,16 +159,15 @@ public class ApiService {
         HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String prefix = response.statusCode() == 429 ? "요청 한도 초과: " : "서버 요청 실패 (" + response.statusCode() + "): ";
-            throw new ApiException(prefix + extractBackendMessage(response.body()));
+            throw new ApiException(response.statusCode(), prefix + extractBackendMessage(response.body()));
         }
-        // 피드백 저장처럼 본문이 없는 성공 응답도 정상 처리한다.
         if (response.body() == null || response.body().isBlank()) {
             return new JsonObject();
         }
         try {
             return JsonParser.parseString(response.body()).getAsJsonObject();
         } catch (RuntimeException exception) {
-            throw new ApiException("서버가 JSON 응답을 반환하지 않았습니다.");
+            throw new ApiException(response.statusCode(), "서버가 JSON 응답을 반환하지 않았습니다.");
         }
     }
 
@@ -201,9 +198,7 @@ public class ApiService {
             JsonObject json = JsonParser.parseString(body).getAsJsonObject();
             if (json.has("detail") && !json.get("detail").isJsonNull()) return json.get("detail").getAsString();
             if (json.has("message") && !json.get("message").isJsonNull()) return json.get("message").getAsString();
-        } catch (RuntimeException ignored) {
-            // Some reverse proxies return HTML/plain text; keep a bounded response in that case.
-        }
+        } catch (RuntimeException ignored) { }
         return abbreviate(body);
     }
 
@@ -228,8 +223,11 @@ public class ApiService {
     }
 
     private static final class ApiException extends Exception {
-        private ApiException(String message) {
+        private final int statusCode;
+
+        private ApiException(int statusCode, String message) {
             super(message);
+            this.statusCode = statusCode;
         }
     }
 }

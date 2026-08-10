@@ -11,10 +11,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-/**
- * Collects only build/runtime metadata required by the server. It never sends a
- * complete configuration file, so credentials and application properties stay local.
- */
 public final class ProjectContextCollector {
 
     private static final List<String> CANDIDATES = List.of(

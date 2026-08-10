@@ -15,7 +15,6 @@ import java.time.Duration;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-/** Direct, streaming BYOK provider client. No provider credential passes through the Error Purifier backend. */
 public final class LlmClientService {
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -158,9 +157,7 @@ public final class LlmClientService {
                 JsonObject error = root.getAsJsonObject("error");
                 if (error.has("message")) return error.get("message").getAsString();
             }
-        } catch (RuntimeException ignored) {
-            // Display a bounded raw body when a provider does not use the common error format.
-        }
+        } catch (RuntimeException ignored) { }
         return body.length() <= 1_000 ? body : body.substring(0, 1_000) + "…";
     }
 
