@@ -1,0 +1,45 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+  <!-- 1. 플러그인 고유 식별자 (마켓플레이스에서 중복되면 안 됨) -->
+  <id>com.jcms.errorpurifier.plugin</id>
+
+  <!-- 2. 플러그인 노출 이름 -->
+  <name>AI Error Log Purifier</name>
+
+  <!-- 3. 개발자/벤더 정보 -->
+  <vendor email="your.email@example.com" url="https://github.com/your-repo">JCMS Developer</vendor>
+
+  <!-- 4. 플러그인 설명 (마켓플레이스에 노출되는 HTML) -->
+  <description><![CDATA[
+      콘솔 오류 로그와 프로젝트 환경을 정제해, 사용자가 선택한 AI에 바로 보낼 프롬프트를 만드는 IntelliJ 플러그인입니다.<br>
+      불필요한 스택 트레이스를 줄이고 재사용 가능한 정제 프로세스를 적용해 AI 토큰 사용량을 낮춥니다.
+    ]]></description>
+
+  <!-- 5. 의존성 (이 플러그인이 동작하기 위해 필요한 인텔리제이 기본 모듈) -->
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.java</depends>
+
+  <!-- 6. 확장 영역 (UI 패널, 툴 윈도우 등 등록) -->
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="AI Error Purifier"
+                anchor="right"
+                icon="AllIcons.General.Modified"
+                factoryClass="com.errorpurifier.ui.ErrorPurifierToolWindowFactory"/>
+    <applicationConfigurable parentId="tools"
+                             instance="com.errorpurifier.service.ErrorPurifierConfigurable"
+                             displayName="AI Error Purifier"/>
+  </extensions>
+
+  <!-- 7. 액션 (사용자가 클릭할 버튼이나 단축키 매핑) -->
+  <actions>
+    <action id="PurifyErrorLogAction"
+            class="com.errorpurifier.action.PurifyErrorLogAction"
+            text="에러 로그 AI 분석 (비용 최적화)"
+            description="선택한 에러 로그를 정제하여 AI에게 분석을 요청합니다.">
+
+      <!-- Run/Debug Console 우클릭 메뉴 -->
+      <add-to-group group-id="ConsoleEditorPopupMenu" anchor="last"/>
+
+    </action>
+  </actions>
+</idea-plugin>
