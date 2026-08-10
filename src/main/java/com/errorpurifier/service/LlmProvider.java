@@ -1,8 +1,8 @@
 package com.errorpurifier.service;
 
 public enum LlmProvider {
-    GEMINI("Gemini", "gemini-2.5-flash-lite"),
-    OPENAI("OpenAI", "gpt-4.1-mini"),
+    GEMINI("Gemini", "gemini-3.5-flash-lite"),
+    OPENAI("OpenAI", "gpt-5-mini"),
     CLAUDE("Claude", "claude-sonnet-5");
 
     private final String displayName;

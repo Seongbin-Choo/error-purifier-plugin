@@ -16,6 +16,7 @@ public final class ErrorPurifierSettings implements PersistentStateComponent<Err
     public String backendUrl = "http://localhost:8080";
     public String provider = LlmProvider.GEMINI.name();
     public String model = LlmProvider.GEMINI.defaultModel();
+    public String analysisMode = AnalysisMode.FAST.name();
 
     public static ErrorPurifierSettings getInstance() {
         return ApplicationManager.getApplication().getService(ErrorPurifierSettings.class);
@@ -41,5 +42,24 @@ public final class ErrorPurifierSettings implements PersistentStateComponent<Err
         } catch (IllegalArgumentException exception) {
             return LlmProvider.GEMINI;
         }
+    }
+
+    public String resolvedModel() {
+        if (model == null || model.isBlank() || isPreviousDefault(model)) {
+            return selectedProvider().defaultModel();
+        }
+        return model;
+    }
+
+    public AnalysisMode selectedAnalysisMode() {
+        try {
+            return AnalysisMode.valueOf(analysisMode);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            return AnalysisMode.FAST;
+        }
+    }
+
+    private boolean isPreviousDefault(String value) {
+        return value.equals("gemini-2.5-flash-lite") || value.equals("gpt-4.1-mini");
     }
 }

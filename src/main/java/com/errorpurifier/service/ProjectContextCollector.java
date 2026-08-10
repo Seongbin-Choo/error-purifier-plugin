@@ -18,7 +18,7 @@ public final class ProjectContextCollector {
             "src/main/resources/application.yml", "src/main/resources/application.yaml", "src/main/resources/application.properties"
     );
     private static final Pattern SAFE_BUILD_LINE = Pattern.compile(
-            "(?i).*(org\\.springframework\\.boot|org\\.jetbrains\\.kotlin|languageVersion|sourceCompatibility|targetCompatibility|JavaVersion|java\\.version|spring-boot).*|^\\s*group\\s*=\\s*['\"][A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)+['\"]\\s*$"
+            "(?i).*(org\\.springframework\\.boot|org\\.jetbrains\\.kotlin|org\\.projectlombok|languageVersion|sourceCompatibility|targetCompatibility|JavaVersion|java\\.version|spring-boot|lombok).*|^\\s*group\\s*=\\s*['\"][A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)+['\"]\\s*$"
     );
 
     private ProjectContextCollector() {

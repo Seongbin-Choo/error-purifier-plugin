@@ -3,8 +3,10 @@ package com.errorpurifier.action;
 import com.errorpurifier.service.ApiService;
 import com.errorpurifier.service.ApiKeyStore;
 import com.errorpurifier.service.ErrorPurifierSettings;
+import com.errorpurifier.service.AnalysisMode;
 import com.errorpurifier.service.LlmClientService;
 import com.errorpurifier.service.LlmProvider;
+import com.errorpurifier.service.UserMessageFormatter;
 import com.errorpurifier.ui.ErrorPurifierToolWindowFactory;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -54,6 +56,7 @@ public class PurifyErrorLogAction extends AnAction {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
                 ApiService.PreparedPrompt response = apiService.preparePrompt(project, rawLog, selectedText);
+                showToolWindow(project, panel -> panel.setRefinedLog(response.refinedLog()));
                 if (!response.analysisReady()) {
                     showToolWindow(project, panel -> panel.showInsufficientLog(response.guidance()));
                     return;
@@ -63,11 +66,14 @@ public class PurifyErrorLogAction extends AnAction {
                 String apiKey = ApiKeyStore.get(provider)
                         .filter(key -> !key.isBlank())
                         .orElseThrow(() -> new IllegalStateException(provider.displayName() + " API 키를 Settings > Tools > AI Error Purifier에 등록하세요."));
-                String model = settings.model.isBlank() ? provider.defaultModel() : settings.model;
+                String model = settings.resolvedModel();
+                AnalysisMode analysisMode = settings.selectedAnalysisMode();
+                String analysisPrompt = response.preparedPrompt() + "\n\n[분석 모드: " + analysisMode.displayName() + "]\n"
+                        + analysisMode.promptInstruction();
 
-                showToolWindow(project, panel -> panel.startStreaming(provider, model));
+                showToolWindow(project, panel -> panel.startStreaming(provider, model, analysisMode));
                 StringBuilder answer = new StringBuilder();
-                LlmClientService.LlmResult result = llmClientService.stream(provider, model, apiKey, response.preparedPrompt(), delta -> {
+                LlmClientService.LlmResult result = llmClientService.stream(provider, model, apiKey, analysisPrompt, analysisMode, delta -> {
                     answer.append(delta);
                     showToolWindow(project, panel -> panel.appendStreamingText(delta));
                 });
@@ -75,9 +81,9 @@ public class PurifyErrorLogAction extends AnAction {
                 Long usageId = null;
                 String usageError = null;
                 try {
-                    usageId = apiService.reportUsage(response, provider, model, result, java.util.List.copyOf(evidenceLines.keySet()), 0);
+                    usageId = apiService.reportUsage(response, analysisPrompt, provider, model, result, java.util.List.copyOf(evidenceLines.keySet()), 0);
                 } catch (Exception exception) {
-                    usageError = exception.getMessage();
+                    usageError = UserMessageFormatter.backendFailure(exception);
                 }
                 Long finalUsageId = usageId;
                 java.util.function.BiConsumer<Integer, Boolean> feedbackHandler = finalUsageId == null ? null :
@@ -86,17 +92,19 @@ public class PurifyErrorLogAction extends AnAction {
                                 apiService.reportFeedback(finalUsageId, rating, resolved);
                                 showToolWindow(project, ErrorPurifierToolWindowFactory.ErrorPurifierPanel::showFeedbackSaved);
                             } catch (Exception feedbackError) {
-                                showToolWindow(project, p -> p.showFeedbackError(feedbackError.getMessage()));
+                                showToolWindow(project, p -> p.showFeedbackError(UserMessageFormatter.backendFailure(feedbackError)));
                             }
                         });
-                showToolWindow(project, panel -> panel.finishStreaming(result, evidenceLines, response.logTruncated(),
-                        response.appliedRuleCounts(), response.protectedLineCount(), feedbackHandler,
+                showToolWindow(project, panel -> panel.finishStreaming(provider, model, analysisMode, result,
+                        response.originalCharacters(), response.refinedCharacters(), response.preparedCharacters(), evidenceLines, response.logTruncated(),
+                        response.appliedRuleCounts(), response.protectedLineCount(), response.repeatedBlockCount(),
+                        response.omittedRepeatBlockCount(), response.repeatCompressionCharacters(), response.diagnosticPlaybooks(), feedbackHandler,
                         feedbackType -> ApplicationManager.getApplication().executeOnPooledThread(() -> {
                             try {
                                 apiService.reportRefinementFeedback(response, feedbackType);
                                 showToolWindow(project, ErrorPurifierToolWindowFactory.ErrorPurifierPanel::showRefinementFeedbackSaved);
                             } catch (Exception feedbackError) {
-                                showToolWindow(project, p -> p.showFeedbackError(feedbackError.getMessage()));
+                                showToolWindow(project, p -> p.showFeedbackError(UserMessageFormatter.backendFailure(feedbackError)));
                             }
                         })
                 ));
@@ -106,7 +114,8 @@ public class PurifyErrorLogAction extends AnAction {
                 }
             } catch (Exception exception) {
                 ApplicationManager.getApplication().invokeLater(() ->
-                        Messages.showErrorDialog(project, "프롬프트 정제 요청에 실패했습니다.\n" + exception.getMessage(), "AI Error Purifier")
+                        Messages.showErrorDialog(project, "오류 분석 요청에 실패했습니다.\n"
+                                + UserMessageFormatter.analysisFailure(exception), "AI Error Purifier")
                 );
             }
         });

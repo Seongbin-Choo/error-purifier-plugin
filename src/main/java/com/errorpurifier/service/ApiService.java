@@ -43,22 +43,32 @@ public class ApiService {
             response.getAsJsonObject("appliedRuleCounts").entrySet()
                     .forEach(entry -> appliedRuleCounts.put(entry.getKey(), entry.getValue().getAsInt()));
         }
+        List<String> diagnosticPlaybooks = new java.util.ArrayList<>();
+        if (response.has("diagnosticPlaybooks") && response.get("diagnosticPlaybooks").isJsonArray()) {
+            response.getAsJsonArray("diagnosticPlaybooks").forEach(playbook -> diagnosticPlaybooks.add(playbook.getAsString()));
+        }
         return new PreparedPrompt(
                 response.get("cacheHit").getAsBoolean(),
                 response.get("cacheKey").getAsString(),
                 response.get("exceptionType").getAsString(),
                 analysisReady ? response.get("preparedPrompt").getAsString() : "",
+                response.has("refinedLog") && !response.get("refinedLog").isJsonNull() ? response.get("refinedLog").getAsString() : "",
                 response.get("originalCharacters").getAsInt(),
+                response.has("refinedCharacters") ? response.get("refinedCharacters").getAsInt() : response.get("preparedCharacters").getAsInt(),
                 response.get("preparedCharacters").getAsInt(),
                 analysisReady,
                 response.has("guidance") && !response.get("guidance").isJsonNull() ? response.get("guidance").getAsString() : null,
                 response.has("logTruncated") && response.get("logTruncated").getAsBoolean(),
                 Map.copyOf(appliedRuleCounts),
-                response.has("protectedLineCount") ? response.get("protectedLineCount").getAsInt() : 0
+                response.has("protectedLineCount") ? response.get("protectedLineCount").getAsInt() : 0,
+                response.has("repeatedBlockCount") ? response.get("repeatedBlockCount").getAsInt() : 0,
+                response.has("omittedRepeatBlockCount") ? response.get("omittedRepeatBlockCount").getAsInt() : 0,
+                response.has("repeatCompressionCharacters") ? response.get("repeatCompressionCharacters").getAsInt() : 0,
+                List.copyOf(diagnosticPlaybooks)
         );
     }
 
-    public long reportUsage(PreparedPrompt prompt, LlmProvider provider, String model, LlmClientService.LlmResult result,
+    public long reportUsage(PreparedPrompt prompt, String sentPrompt, LlmProvider provider, String model, LlmClientService.LlmResult result,
                             List<String> referencedLines, int rating) throws Exception {
         String deviceId = ensureRegisteredDevice();
         JsonObject body = new JsonObject();
@@ -66,11 +76,13 @@ public class ApiService {
         body.addProperty("model", model);
         body.addProperty("cacheKey", prompt.cacheKey());
         body.addProperty("cacheHit", prompt.cacheHit());
-        body.addProperty("promptHash", sha256(prompt.preparedPrompt()));
+        body.addProperty("promptHash", sha256(sentPrompt));
         body.addProperty("originalCharacters", prompt.originalCharacters());
         body.addProperty("preparedCharacters", prompt.preparedCharacters());
+        body.addProperty("repeatCompressionCharacters", prompt.repeatCompressionCharacters());
         body.addProperty("inputTokens", result.inputTokens());
         body.addProperty("outputTokens", result.outputTokens());
+        body.addProperty("thinkingTokens", result.thinkingTokens());
         body.addProperty("totalTokens", result.totalTokens());
         body.addProperty("latencyMs", result.latencyMs());
         body.addProperty("rating", rating);
@@ -105,8 +117,11 @@ public class ApiService {
                 response.get("totalRequests").getAsLong(), response.get("helpfulResponses").getAsLong(),
                 response.get("unhelpfulResponses").getAsLong(), response.get("resolvedResponses").getAsLong(),
                 response.get("inputTokens").getAsLong(), response.get("outputTokens").getAsLong(),
+                response.has("thinkingTokens") ? response.get("thinkingTokens").getAsLong() : 0,
                 response.get("totalTokens").getAsLong(), response.get("originalCharacters").getAsLong(),
-                response.get("preparedCharacters").getAsLong(), response.get("promptCharacterChangePercent").getAsDouble(),
+                response.get("preparedCharacters").getAsLong(),
+                response.has("repeatCompressionCharacters") ? response.get("repeatCompressionCharacters").getAsLong() : 0,
+                response.get("promptCharacterChangePercent").getAsDouble(),
                 response.get("averageLatencyMs").getAsLong());
     }
 
@@ -211,14 +226,16 @@ public class ApiService {
     }
 
     public record PreparedPrompt(boolean cacheHit, String cacheKey, String exceptionType,
-                                 String preparedPrompt, int originalCharacters, int preparedCharacters,
+                                 String preparedPrompt, String refinedLog, int originalCharacters, int refinedCharacters, int preparedCharacters,
                                  boolean analysisReady, String guidance, boolean logTruncated,
-                                 Map<String, Integer> appliedRuleCounts, int protectedLineCount) {
+                                 Map<String, Integer> appliedRuleCounts, int protectedLineCount, int repeatedBlockCount,
+                                 int omittedRepeatBlockCount, int repeatCompressionCharacters,
+                                 List<String> diagnosticPlaybooks) {
     }
 
     public record UsageSummary(long totalRequests, long helpfulResponses, long unhelpfulResponses,
-                               long resolvedResponses, long inputTokens, long outputTokens, long totalTokens,
-                               long originalCharacters, long preparedCharacters, double promptCharacterChangePercent,
+                               long resolvedResponses, long inputTokens, long outputTokens, long thinkingTokens, long totalTokens,
+                               long originalCharacters, long preparedCharacters, long repeatCompressionCharacters, double promptCharacterChangePercent,
                                long averageLatencyMs) {
     }
 

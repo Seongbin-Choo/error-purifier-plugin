@@ -18,15 +18,40 @@ import java.util.stream.Stream;
 public final class LlmClientService {
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    public LlmResult stream(LlmProvider provider, String model, String apiKey, String prompt, Consumer<String> onDelta) throws Exception {
+    public LlmResult stream(LlmProvider provider, String model, String apiKey, String prompt, AnalysisMode analysisMode, Consumer<String> onDelta) throws Exception {
         long startedAt = System.nanoTime();
         Usage usage = switch (provider) {
             case OPENAI -> streamOpenAi(model, apiKey, prompt, onDelta);
-            case GEMINI -> streamGemini(model, apiKey, prompt, onDelta);
-            case CLAUDE -> streamClaude(model, apiKey, prompt, onDelta);
+            case GEMINI -> streamGemini(model, apiKey, prompt, analysisMode, onDelta);
+            case CLAUDE -> streamClaude(model, apiKey, prompt, analysisMode, onDelta);
         };
-        return new LlmResult(usage.inputTokens, usage.outputTokens, usage.totalTokens,
+        return new LlmResult(usage.inputTokens, usage.outputTokens, usage.thinkingTokens, usage.totalTokens,
                 (System.nanoTime() - startedAt) / 1_000_000);
+    }
+
+    public void verifyConnection(LlmProvider provider, String model, String apiKey) throws Exception {
+        HttpRequest request = switch (provider) {
+            case OPENAI -> HttpRequest.newBuilder(URI.create("https://api.openai.com/v1/models/" + encodePathSegment(model)))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(20))
+                    .GET()
+                    .build();
+            case GEMINI -> HttpRequest.newBuilder(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + encodePathSegment(model)))
+                    .header("x-goog-api-key", apiKey)
+                    .timeout(Duration.ofSeconds(20))
+                    .GET()
+                    .build();
+            case CLAUDE -> HttpRequest.newBuilder(URI.create("https://api.anthropic.com/v1/models/" + encodePathSegment(model)))
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .timeout(Duration.ofSeconds(20))
+                    .GET()
+                    .build();
+        };
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IOException("LLM 연결 실패 (" + response.statusCode() + "): " + extractErrorMessage(response.body()));
+        }
     }
 
     private Usage streamOpenAi(String model, String apiKey, String prompt, Consumer<String> onDelta) throws Exception {
@@ -47,13 +72,15 @@ public final class LlmClientService {
             }
             if ("response.completed".equals(type(event))) {
                 JsonObject usage = event.getAsJsonObject("response").getAsJsonObject("usage");
-                return usage == null ? null : new Usage(number(usage, "input_tokens"), number(usage, "output_tokens"), number(usage, "total_tokens"));
+                int thinkingTokens = usage != null && usage.has("output_tokens_details")
+                        ? number(usage.getAsJsonObject("output_tokens_details"), "reasoning_tokens") : 0;
+                return usage == null ? null : new Usage(number(usage, "input_tokens"), number(usage, "output_tokens"), thinkingTokens, number(usage, "total_tokens"));
             }
             return null;
         });
     }
 
-    private Usage streamGemini(String model, String apiKey, String prompt, Consumer<String> onDelta) throws Exception {
+    private Usage streamGemini(String model, String apiKey, String prompt, AnalysisMode analysisMode, Consumer<String> onDelta) throws Exception {
         JsonObject part = new JsonObject();
         part.addProperty("text", prompt);
         JsonArray parts = new JsonArray();
@@ -64,6 +91,18 @@ public final class LlmClientService {
         contents.add(content);
         JsonObject body = new JsonObject();
         body.add("contents", contents);
+        JsonObject generationConfig = new JsonObject();
+        generationConfig.addProperty("maxOutputTokens", analysisMode.maxOutputTokens());
+        JsonObject thinkingConfig = new JsonObject();
+        if (model.startsWith("gemini-3")) {
+            thinkingConfig.addProperty("thinkingLevel", analysisMode.geminiThinkingLevel());
+        } else if (model.startsWith("gemini-2.5")) {
+            thinkingConfig.addProperty("thinkingBudget", analysisMode.geminiThinkingBudget());
+        }
+        if (!thinkingConfig.entrySet().isEmpty()) {
+            generationConfig.add("thinkingConfig", thinkingConfig);
+        }
+        body.add("generationConfig", generationConfig);
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" + URLEncoder.encode(model, StandardCharsets.UTF_8)
                 + ":streamGenerateContent?alt=sse";
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -84,13 +123,14 @@ public final class LlmClientService {
             }
             if (event.has("usageMetadata")) {
                 JsonObject usage = event.getAsJsonObject("usageMetadata");
-                return new Usage(number(usage, "promptTokenCount"), number(usage, "candidatesTokenCount"), number(usage, "totalTokenCount"));
+                return new Usage(number(usage, "promptTokenCount"), number(usage, "candidatesTokenCount"),
+                        number(usage, "thoughtsTokenCount"), number(usage, "totalTokenCount"));
             }
             return null;
         });
     }
 
-    private Usage streamClaude(String model, String apiKey, String prompt, Consumer<String> onDelta) throws Exception {
+    private Usage streamClaude(String model, String apiKey, String prompt, AnalysisMode analysisMode, Consumer<String> onDelta) throws Exception {
         JsonObject message = new JsonObject();
         message.addProperty("role", "user");
         message.addProperty("content", prompt);
@@ -98,7 +138,7 @@ public final class LlmClientService {
         messages.add(message);
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
-        body.addProperty("max_tokens", 4096);
+        body.addProperty("max_tokens", analysisMode.maxOutputTokens());
         body.addProperty("stream", true);
         body.add("messages", messages);
         HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.anthropic.com/v1/messages"))
@@ -118,7 +158,7 @@ public final class LlmClientService {
             }
             if ("message_delta".equals(type(event))) {
                 int outputTokens = number(event.getAsJsonObject("usage"), "output_tokens");
-                return new Usage(inputTokens[0], outputTokens, inputTokens[0] + outputTokens);
+                return new Usage(inputTokens[0], outputTokens, 0, inputTokens[0] + outputTokens);
             }
             return null;
         });
@@ -133,7 +173,7 @@ public final class LlmClientService {
                         + (body.isBlank() ? "응답 본문 없음" : extractErrorMessage(body)));
             }
         }
-        Usage latestUsage = new Usage(0, 0, 0);
+        Usage latestUsage = new Usage(0, 0, 0, 0);
         try (Stream<String> lines = response.body()) {
             for (String line : (Iterable<String>) lines::iterator) {
                 if (!line.startsWith("data:")) continue;
@@ -150,6 +190,10 @@ public final class LlmClientService {
     private String type(JsonObject event) { return event.has("type") ? event.get("type").getAsString() : ""; }
     private int number(JsonObject value, String key) { return value != null && value.has(key) ? value.get(key).getAsInt() : 0; }
 
+    private String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
     private String extractErrorMessage(String body) {
         try {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
@@ -162,6 +206,6 @@ public final class LlmClientService {
     }
 
     private interface EventConsumer { Usage accept(JsonObject event); }
-    private record Usage(int inputTokens, int outputTokens, int totalTokens) { }
-    public record LlmResult(int inputTokens, int outputTokens, int totalTokens, long latencyMs) { }
+    private record Usage(int inputTokens, int outputTokens, int thinkingTokens, int totalTokens) { }
+    public record LlmResult(int inputTokens, int outputTokens, int thinkingTokens, int totalTokens, long latencyMs) { }
 }

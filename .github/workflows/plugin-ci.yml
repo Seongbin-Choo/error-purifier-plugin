@@ -1,0 +1,28 @@
+name: Plugin CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Verify and package plugin
+        run: ./gradlew verifyPlugin buildPlugin
+      - name: Upload plugin ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-purifier-plugin
+          path: build/distributions/*.zip
+          if-no-files-found: error

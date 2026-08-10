@@ -2,6 +2,8 @@ package com.errorpurifier.service;
 
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.ui.Messages;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,6 +23,8 @@ public class ErrorPurifierConfigurable implements Configurable {
     private JTextField backendUrlField;
     private JComboBox<LlmProvider> providerBox;
     private JTextField modelField;
+    private JComboBox<AnalysisMode> analysisModeBox;
+    private JLabel analysisModeDescriptionLabel;
     private JPasswordField apiKeyField;
     private JButton connectionTestButton;
     private JLabel connectionStatusLabel;
@@ -46,8 +50,16 @@ public class ErrorPurifierConfigurable implements Configurable {
         });
         panel.add(providerBox);
         panel.add(new JLabel("Model"));
-        modelField = new JTextField(ErrorPurifierSettings.getInstance().model);
+        modelField = new JTextField(ErrorPurifierSettings.getInstance().resolvedModel());
         panel.add(modelField);
+        panel.add(new JLabel("Analysis Mode"));
+        analysisModeBox = new JComboBox<>(AnalysisMode.values());
+        analysisModeBox.setSelectedItem(ErrorPurifierSettings.getInstance().selectedAnalysisMode());
+        analysisModeDescriptionLabel = new JLabel();
+        analysisModeBox.addActionListener(event -> updateAnalysisModeDescription());
+        updateAnalysisModeDescription();
+        panel.add(analysisModeBox);
+        panel.add(analysisModeDescriptionLabel);
         panel.add(new JLabel("API Key (stored only in IntelliJ PasswordSafe)"));
         apiKeyField = new JPasswordField(ApiKeyStore.get(ErrorPurifierSettings.getInstance().selectedProvider()).orElse(""));
         panel.add(apiKeyField);
@@ -66,6 +78,7 @@ public class ErrorPurifierConfigurable implements Configurable {
         return backendUrlField != null && (!backendUrlField.getText().trim().equals(ErrorPurifierSettings.getInstance().backendUrl)
                 || providerBox.getSelectedItem() != ErrorPurifierSettings.getInstance().selectedProvider()
                 || !modelField.getText().trim().equals(ErrorPurifierSettings.getInstance().model)
+                || analysisModeBox.getSelectedItem() != ErrorPurifierSettings.getInstance().selectedAnalysisMode()
                 || !String.valueOf(apiKeyField.getPassword()).equals(ApiKeyStore.get((LlmProvider) providerBox.getSelectedItem()).orElse("")));
     }
 
@@ -75,6 +88,7 @@ public class ErrorPurifierConfigurable implements Configurable {
         LlmProvider provider = (LlmProvider) providerBox.getSelectedItem();
         ErrorPurifierSettings.getInstance().provider = provider.name();
         ErrorPurifierSettings.getInstance().model = modelField.getText().trim();
+        ErrorPurifierSettings.getInstance().analysisMode = ((AnalysisMode) analysisModeBox.getSelectedItem()).name();
         ApiKeyStore.save(provider, String.valueOf(apiKeyField.getPassword()).trim());
     }
 
@@ -83,7 +97,9 @@ public class ErrorPurifierConfigurable implements Configurable {
         if (backendUrlField != null) {
             backendUrlField.setText(ErrorPurifierSettings.getInstance().backendUrl);
             providerBox.setSelectedItem(ErrorPurifierSettings.getInstance().selectedProvider());
-            modelField.setText(ErrorPurifierSettings.getInstance().model);
+            modelField.setText(ErrorPurifierSettings.getInstance().resolvedModel());
+            analysisModeBox.setSelectedItem(ErrorPurifierSettings.getInstance().selectedAnalysisMode());
+            updateAnalysisModeDescription();
             apiKeyField.setText(ApiKeyStore.get(ErrorPurifierSettings.getInstance().selectedProvider()).orElse(""));
         }
     }
@@ -103,20 +119,22 @@ public class ErrorPurifierConfigurable implements Configurable {
 
         connectionTestButton.setEnabled(false);
         showConnectionStatus("연결 확인 중…", Color.DARK_GRAY);
+        ModalityState modalityState = ModalityState.stateForComponent(connectionTestButton);
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
-                LlmClientService.LlmResult result = new LlmClientService().stream(provider, model, apiKey,
-                        "Reply with exactly: OK", ignored -> { });
+                new LlmClientService().verifyConnection(provider, model, apiKey);
                 ApplicationManager.getApplication().invokeLater(() -> {
                     connectionTestButton.setEnabled(true);
-                    showConnectionStatus("연결 성공 · 입력 " + result.inputTokens() + " / 출력 "
-                            + result.outputTokens() + " 토큰", new Color(40, 150, 40));
-                });
+                    showConnectionStatus("연결 성공 · API 키와 모델을 확인했습니다.", new Color(40, 150, 40));
+                    Messages.showInfoMessage("API 키와 모델 연결을 확인했습니다.", "AI Error Purifier");
+                }, modalityState);
             } catch (Exception exception) {
                 ApplicationManager.getApplication().invokeLater(() -> {
                     connectionTestButton.setEnabled(true);
-                    showConnectionStatus("연결 실패: " + conciseMessage(exception), Color.RED);
-                });
+                    String message = UserMessageFormatter.llmConnectionFailure(exception);
+                    showConnectionStatus("연결 실패: " + message, Color.RED);
+                    Messages.showErrorDialog("LLM 연결에 실패했습니다.\n" + message, "AI Error Purifier");
+                }, modalityState);
             }
         });
     }
@@ -126,11 +144,11 @@ public class ErrorPurifierConfigurable implements Configurable {
         connectionStatusLabel.setForeground(color);
     }
 
-    private String conciseMessage(Exception exception) {
-        String message = exception.getMessage();
-        if (message == null || message.isBlank()) return exception.getClass().getSimpleName();
-        int lineEnd = message.indexOf('\n');
-        String firstLine = lineEnd >= 0 ? message.substring(0, lineEnd) : message;
-        return firstLine.length() <= 200 ? firstLine : firstLine.substring(0, 200) + "…";
+    private void updateAnalysisModeDescription() {
+        AnalysisMode mode = (AnalysisMode) analysisModeBox.getSelectedItem();
+        if (mode != null) {
+            analysisModeDescriptionLabel.setText("  " + mode.description());
+        }
     }
+
 }
