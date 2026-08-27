@@ -1,7 +1,6 @@
 plugins {
   id("java")
-  id("org.jetbrains.kotlin.jvm") version "1.9.0"
-  id("org.jetbrains.intellij") version "1.17.4"
+  id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = "com.errorpurifier"
@@ -9,36 +8,57 @@ version = "1.0-SNAPSHOT"
 
 repositories {
   mavenCentral()
+  intellijPlatform {
+    defaultRepositories()
+  }
 }
 
-intellij {
-  version.set("2022.2.5")
-  type.set("IC")
+dependencies {
+  testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 
-  plugins.set(listOf("com.intellij.java"))
+  intellijPlatform {
+    intellijIdea("2026.2.1")
+    bundledPlugin("com.intellij.java")
+  }
+}
+
+java {
+  toolchain {
+    languageVersion.set(JavaLanguageVersion.of(25))
+  }
+
+  sourceCompatibility = JavaVersion.VERSION_25
+  targetCompatibility = JavaVersion.VERSION_25
+}
+
+intellijPlatform {
+  pluginConfiguration {
+    ideaVersion {
+      sinceBuild.set("262")
+      untilBuild.set(provider { null })
+    }
+  }
+
+  pluginVerification {
+    ides {
+      current()
+    }
+  }
+
+  signing {
+    certificateChain.set(providers.environmentVariable("CERTIFICATE_CHAIN"))
+    privateKey.set(providers.environmentVariable("PRIVATE_KEY"))
+    password.set(providers.environmentVariable("PRIVATE_KEY_PASSWORD"))
+  }
+
+  publishing {
+    token.set(providers.environmentVariable("PUBLISH_TOKEN"))
+  }
 }
 
 tasks {
-  withType<JavaCompile> {
-    sourceCompatibility = "17"
-    targetCompatibility = "17"
-  }
-  withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions.jvmTarget = "17"
-  }
-
-  patchPluginXml {
-    sinceBuild.set("222")
-    untilBuild.set("232.*")
-  }
-
-  signPlugin {
-    certificateChain.set(System.getenv("CERTIFICATE_CHAIN"))
-    privateKey.set(System.getenv("PRIVATE_KEY"))
-    password.set(System.getenv("PRIVATE_KEY_PASSWORD"))
-  }
-
-  publishPlugin {
-    token.set(System.getenv("PUBLISH_TOKEN"))
+  test {
+    useJUnitPlatform()
   }
 }

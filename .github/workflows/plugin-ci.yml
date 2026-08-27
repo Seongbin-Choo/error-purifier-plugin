@@ -16,10 +16,10 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '25'
           cache: gradle
       - name: Verify and package plugin
-        run: ./gradlew verifyPlugin buildPlugin
+        run: ./gradlew test verifyPluginProjectConfiguration verifyPluginStructure verifyPlugin buildPlugin
       - name: Upload plugin ZIP
         uses: actions/upload-artifact@v4
         with:
