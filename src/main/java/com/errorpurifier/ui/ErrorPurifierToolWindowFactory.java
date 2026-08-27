@@ -193,16 +193,19 @@ public class ErrorPurifierToolWindowFactory implements ToolWindowFactory {
                                     Map<String, String> evidenceLines, boolean logTruncated,
                                     Map<String, Integer> appliedRuleCounts, int protectedLineCount, int repeatedBlockCount,
                                     int omittedRepeatBlockCount, int repeatCompressionCharacters, java.util.List<String> diagnosticPlaybooks,
+                                    java.util.List<String> groundingWarnings,
                                     java.util.function.BiConsumer<Integer, Boolean> feedbackHandler,
                                     java.util.function.Consumer<String> refinementFeedbackHandler) {
             statusLabel.setText("분석 완료 · 입력 " + result.inputTokens() + " 토큰 · 출력 " + result.outputTokens()
                     + " 토큰" + (logTruncated ? " · 로그 압축 적용" : "")
                     + " · " + refinementSummary(appliedRuleCounts, protectedLineCount)
                     + repeatCompressionSummary(repeatedBlockCount, omittedRepeatBlockCount, repeatCompressionCharacters)
+                    + (groundingWarnings.isEmpty() ? "" : " · 검증 경고 " + groundingWarnings.size() + "건")
                     + " · 근거 " + evidenceLines.size() + "개 · " + result.latencyMs() + "ms");
-            statusLabel.setForeground(new Color(40, 150, 40));
+            statusLabel.setForeground(groundingWarnings.isEmpty() ? new Color(40, 150, 40) : new Color(185, 100, 0));
             promptArea.setText(analysisSummary(provider, model, analysisMode, result, originalCharacters, refinedCharacters, preparedCharacters,
-                    repeatedBlockCount, omittedRepeatBlockCount, repeatCompressionCharacters, diagnosticPlaybooks) + "\n\n" + promptArea.getText());
+                    repeatedBlockCount, omittedRepeatBlockCount, repeatCompressionCharacters, diagnosticPlaybooks)
+                    + groundingWarningSummary(groundingWarnings) + "\n\n" + promptArea.getText());
             appendEvidence(evidenceLines);
             promptArea.setCaretPosition(0);
             contentTabs.setSelectedIndex(0);
@@ -219,6 +222,16 @@ public class ErrorPurifierToolWindowFactory implements ToolWindowFactory {
             }
             promptArea.append("\n\n---\n[AI 답변이 인용한 실제 로그]\n");
             evidenceLines.forEach((lineNumber, text) -> promptArea.append(lineNumber + " | " + text + "\n"));
+        }
+
+        private String groundingWarningSummary(java.util.List<String> groundingWarnings) {
+            if (groundingWarnings.isEmpty()) {
+                return "";
+            }
+            return "\n\n[답변 검증 경고]\n" + groundingWarnings.stream()
+                    .map(warning -> "- " + warning)
+                    .reduce((left, right) -> left + "\n" + right)
+                    .orElse("");
         }
 
         private String analysisSummary(LlmProvider provider, String model, AnalysisMode analysisMode, LlmClientService.LlmResult result,

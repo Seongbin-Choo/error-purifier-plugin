@@ -11,12 +11,13 @@ IntelliJ IDEA 콘솔 로그를 정제해 사용자가 선택한 LLM에 분석을
 - 빠른/정밀/심층 분석 모드
 - AI 답변·정제 로그·내 사용량 탭 제공
 - 실제 입력·출력·추론 토큰, 응답 시간, 반복 압축 절감량 표시
+- 누락된 근거 인용과 실행 환경 종료 코드의 오해석 가능성을 답변 검증 경고로 표시
 - LLM 사용량과 정제 품질 피드백 전송
 
 ## 요구 사항
 
-- IntelliJ IDEA 2022.2~2023.2
-- JDK 17
+- IntelliJ IDEA 2026.2 이상 (빌드 262 이상)
+- JDK 25
 - 실행 중인 Error Purifier 백엔드
 
 ## 설정
@@ -28,7 +29,7 @@ IntelliJ IDEA 콘솔 로그를 정제해 사용자가 선택한 LLM에 분석을
 ## 빌드
 
 ```bash
-JAVA_HOME=/path/to/jdk-17 ./gradlew buildPlugin
+JAVA_HOME=/path/to/jdk-25 ./gradlew buildPlugin
 ```
 
 생성된 ZIP 파일은 `build/distributions`에 위치합니다.
@@ -43,4 +44,4 @@ JAVA_HOME=/path/to/jdk-17 ./gradlew buildPlugin
 
 ## CI
 
-GitHub Actions는 push와 pull request마다 JDK 17 환경에서 `./gradlew verifyPlugin buildPlugin`을 실행합니다. IntelliJ 호환성 검증과 ZIP 패키징이 함께 확인되며, 성공한 실행의 ZIP은 Actions artifact로 내려받을 수 있습니다.
+GitHub Actions는 push와 pull request마다 JDK 25 환경에서 `./gradlew test verifyPluginProjectConfiguration verifyPluginStructure verifyPlugin buildPlugin`을 실행합니다. 테스트, 프로젝트 설정·플러그인 구조·IntelliJ 2026.2.1 바이너리 호환성과 ZIP 패키징이 함께 확인되며, 성공한 실행의 ZIP은 Actions artifact로 내려받을 수 있습니다.

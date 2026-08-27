@@ -4,6 +4,8 @@ import com.errorpurifier.service.ApiService;
 import com.errorpurifier.service.ApiKeyStore;
 import com.errorpurifier.service.ErrorPurifierSettings;
 import com.errorpurifier.service.AnalysisMode;
+import com.errorpurifier.service.AnswerGroundingValidator;
+import com.errorpurifier.service.EvidenceLineExtractor;
 import com.errorpurifier.service.LlmClientService;
 import com.errorpurifier.service.LlmProvider;
 import com.errorpurifier.service.UserMessageFormatter;
@@ -21,7 +23,6 @@ import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class PurifyErrorLogAction extends AnAction {
@@ -75,9 +76,10 @@ public class PurifyErrorLogAction extends AnAction {
                 StringBuilder answer = new StringBuilder();
                 LlmClientService.LlmResult result = llmClientService.stream(provider, model, apiKey, analysisPrompt, analysisMode, delta -> {
                     answer.append(delta);
-                    showToolWindow(project, panel -> panel.appendStreamingText(delta));
+                    updatePanel(project, panel -> panel.appendStreamingText(delta));
                 });
-                Map<String, String> evidenceLines = extractEvidenceLines(response.preparedPrompt(), answer.toString());
+                Map<String, String> evidenceLines = EvidenceLineExtractor.extract(response.preparedPrompt(), answer.toString());
+                java.util.List<String> groundingWarnings = AnswerGroundingValidator.validate(response.refinedLog(), answer.toString(), evidenceLines);
                 Long usageId = null;
                 String usageError = null;
                 try {
@@ -98,7 +100,7 @@ public class PurifyErrorLogAction extends AnAction {
                 showToolWindow(project, panel -> panel.finishStreaming(provider, model, analysisMode, result,
                         response.originalCharacters(), response.refinedCharacters(), response.preparedCharacters(), evidenceLines, response.logTruncated(),
                         response.appliedRuleCounts(), response.protectedLineCount(), response.repeatedBlockCount(),
-                        response.omittedRepeatBlockCount(), response.repeatCompressionCharacters(), response.diagnosticPlaybooks(), feedbackHandler,
+                        response.omittedRepeatBlockCount(), response.repeatCompressionCharacters(), response.diagnosticPlaybooks(), groundingWarnings, feedbackHandler,
                         feedbackType -> ApplicationManager.getApplication().executeOnPooledThread(() -> {
                             try {
                                 apiService.reportRefinementFeedback(response, feedbackType);
@@ -121,23 +123,17 @@ public class PurifyErrorLogAction extends AnAction {
         });
     }
 
-    private Map<String, String> extractEvidenceLines(String preparedPrompt, String answer) {
-        Map<String, String> promptLines = new LinkedHashMap<>();
-        java.util.regex.Matcher promptMatcher = java.util.regex.Pattern
-                .compile("(?m)^(L\\d{3})\\s*\\|\\s?(.*)$")
-                .matcher(preparedPrompt);
-        while (promptMatcher.find()) {
-            promptLines.put(promptMatcher.group(1), promptMatcher.group(2));
-        }
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("L\\d{3}").matcher(answer);
-        Map<String, String> evidence = new LinkedHashMap<>();
-        while (matcher.find()) {
-            String lineNumber = matcher.group();
-            if (promptLines.containsKey(lineNumber)) {
-                evidence.putIfAbsent(lineNumber, promptLines.get(lineNumber));
+    /**
+     * 이미 열려 있는 패널만 갱신한다. 스트리밍처럼 호출이 잦은 경로에서
+     * 토큰마다 툴윈도우를 다시 활성화해 포커스를 빼앗지 않도록 분리했다.
+     */
+    private void updatePanel(Project project, java.util.function.Consumer<ErrorPurifierToolWindowFactory.ErrorPurifierPanel> update) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            ErrorPurifierToolWindowFactory.ErrorPurifierPanel panel = ErrorPurifierToolWindowFactory.getPanel(project);
+            if (panel != null) {
+                update.accept(panel);
             }
-        }
-        return evidence;
+        });
     }
 
     private void showToolWindow(Project project, java.util.function.Consumer<ErrorPurifierToolWindowFactory.ErrorPurifierPanel> update) {
