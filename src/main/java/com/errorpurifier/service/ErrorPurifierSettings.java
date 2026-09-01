@@ -17,6 +17,7 @@ public final class ErrorPurifierSettings implements PersistentStateComponent<Err
     public String provider = LlmProvider.GEMINI.name();
     public String model = LlmProvider.GEMINI.defaultModel();
     public String analysisMode = AnalysisMode.FAST.name();
+    public String privacyConsentVersion = "";
 
     public static ErrorPurifierSettings getInstance() {
         return ApplicationManager.getApplication().getService(ErrorPurifierSettings.class);

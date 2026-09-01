@@ -1,5 +1,7 @@
 package com.errorpurifier.service;
 
+import com.errorpurifier.ErrorPurifierBundle;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,19 +44,19 @@ public final class AnswerGroundingValidator {
         Set<String> missingLines = new LinkedHashSet<>(citedLines);
         missingLines.removeAll(evidenceLines.keySet());
         if (!missingLines.isEmpty()) {
-            warnings.add("답변이 실제 로그에 없는 근거 번호를 인용했습니다: " + String.join(", ", missingLines));
+            warnings.add(ErrorPurifierBundle.message("grounding.missingEvidence", String.join(", ", missingLines)));
         }
 
         boolean hasExecutionMetadata = refinedLog != null && refinedLog.contains("[실행 환경 메타데이터");
         boolean tiesExitCodeToFailure = EXIT_TO_CAUSAL_ASSERTION.matcher(answer).find();
         if (hasExecutionMetadata && tiesExitCodeToFailure) {
-            warnings.add("실행 환경 종료 코드를 오류와 연결했습니다. 이 로그만으로 종료 원인은 알 수 없으며 별도 애플리케이션 종료 로그가 필요합니다.");
+            warnings.add(ErrorPurifierBundle.message("grounding.exitCode"));
         }
         if (refinedLog != null && NORMAL_OUTCOME.matcher(refinedLog).find() && tiesExitCodeToFailure) {
-            warnings.add("로그의 정상 처리 신호와 비정상 종료 단정이 상충할 수 있습니다.");
+            warnings.add(ErrorPurifierBundle.message("grounding.normalConflict"));
         }
         if (hasCrossTenantCacheEvidence(refinedLog) && CARRIER_THREAD_LOCAL_CAUSAL_ASSERTION.matcher(answer).find()) {
-            warnings.add("서로 다른 테넌트가 같은 캐시 결과를 참조한 로그에서는 캐시 키 격리가 1차 의심입니다. carrier thread 이름만으로 ThreadLocal 오염을 원인으로 단정할 수 없습니다.");
+            warnings.add(ErrorPurifierBundle.message("grounding.crossTenantCache"));
         }
         return List.copyOf(warnings);
     }

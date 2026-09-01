@@ -1,5 +1,6 @@
 package com.errorpurifier.service;
 
+import com.errorpurifier.ErrorPurifierBundle;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -16,7 +17,15 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public final class LlmClientService {
-    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    private final ConsentAwareHttpSender httpSender;
+
+    public LlmClientService() {
+        this(ConsentAwareHttpSender.using(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()));
+    }
+
+    LlmClientService(ConsentAwareHttpSender httpSender) {
+        this.httpSender = httpSender;
+    }
 
     public LlmResult stream(LlmProvider provider, String model, String apiKey, String prompt, AnalysisMode analysisMode, Consumer<String> onDelta) throws Exception {
         long startedAt = System.nanoTime();
@@ -48,9 +57,10 @@ public final class LlmClientService {
                     .GET()
                     .build();
         };
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpSender.sendString(request);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("LLM 연결 실패 (" + response.statusCode() + "): " + extractErrorMessage(response.body()));
+            throw new IOException(ErrorPurifierBundle.message("llm.error.connection", response.statusCode(),
+                    extractErrorMessage(response.body())));
         }
     }
 
@@ -165,12 +175,12 @@ public final class LlmClientService {
     }
 
     private Usage consumeSse(HttpRequest request, Consumer<String> onDelta, EventConsumer eventConsumer) throws Exception {
-        HttpResponse<Stream<String>> response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+        HttpResponse<Stream<String>> response = httpSender.sendLines(request);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             try (Stream<String> lines = response.body()) {
                 String body = lines.limit(20).collect(java.util.stream.Collectors.joining("\n"));
-                throw new IOException("LLM 요청 실패 (" + response.statusCode() + "): "
-                        + (body.isBlank() ? "응답 본문 없음" : extractErrorMessage(body)));
+                throw new IOException(ErrorPurifierBundle.message("llm.error.request", response.statusCode(),
+                        body.isBlank() ? ErrorPurifierBundle.message("llm.error.emptyBody") : extractErrorMessage(body)));
             }
         }
         Usage latestUsage = new Usage(0, 0, 0, 0);
