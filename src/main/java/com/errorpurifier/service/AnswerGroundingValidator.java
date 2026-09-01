@@ -1,5 +1,7 @@
 package com.errorpurifier.service;
 
+import com.errorpurifier.ErrorPurifierBundle;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -10,12 +12,28 @@ import java.util.regex.Pattern;
 
 public final class AnswerGroundingValidator {
 
+    private static final String NOT_NEGATED_CAUSAL_VERB = "(?<!did not )(?<!didn['’]t )(?<!does not )(?<!doesn['’]t )"
+            + "(?<!is not )(?<!isn['’]t )(?<!was not )(?<!wasn['’]t )(?<!can not )(?<!cannot )"
+            + "(?<!can['’]t )(?<!could not )(?<!couldn['’]t )";
     private static final Pattern CITED_LINE = Pattern.compile("(?<![A-Za-z0-9])L\\d{3,}");
     private static final Pattern NORMAL_OUTCOME = Pattern.compile("(?i)(?:\\b200\\s+OK\\b|정상 응답|예외 없음|no exception)");
-    private static final Pattern EXIT_TO_CAUSAL_ASSERTION = Pattern.compile("(?is)(?:(?:exit\\s*code|종료\\s*코드).{0,300}(?:비정상(?:\\s+프로세스)?\\s*종료|크래시|강제\\s*종료|검증\\s*실패)|(?:비정상(?:\\s+프로세스)?\\s*종료|크래시|강제\\s*종료|검증\\s*실패).{0,300}(?:exit\\s*code|종료\\s*코드))");
+    private static final Pattern EXIT_TO_CAUSAL_ASSERTION = Pattern.compile(
+            "(?is)(?:(?:exit\\s*code|종료\\s*코드).{0,300}(?:비정상(?:\\s+프로세스)?\\s*종료|크래시|강제\\s*종료|검증\\s*실패)"
+                    + "|(?:비정상(?:\\s+프로세스)?\\s*종료|크래시|강제\\s*종료|검증\\s*실패).{0,300}(?:exit\\s*code|종료\\s*코드)"
+                    + "|exit\\s*code[^.!?\\r\\n]{0,100}" + NOT_NEGATED_CAUSAL_VERB
+                    + "(?:cause(?:d|s)?|causing|led\\s+to|result(?:ed|s)?\\s+in|trigger(?:ed|s)?)\\s+(?:the\\s+)?"
+                    + "(?:crash|failure|failed\\s+(?:build|test|process)|abnormal\\s+termination)"
+                    + "|(?:crash|failure|abnormal\\s+termination).{0,100}(?:was\\s+caused\\s+by|resulted\\s+from|was\\s+due\\s+to).{0,100}exit\\s*code)"
+    );
     private static final Pattern RESOLVED_TENANT = Pattern.compile("(?m)Resolved tenantId=([^\\s]+)");
     private static final Pattern CACHED_TENANT = Pattern.compile("(?m)Returning cached tenant context result: tenantId=([^\\s]+)");
-    private static final Pattern CARRIER_THREAD_LOCAL_CAUSAL_ASSERTION = Pattern.compile("(?is)(?:(?:캐리어\\s*스레드|carrier\\s*thread).{0,250}(?:threadlocal|테넌트\\s*컨텍스트).{0,250}(?:재사용|바인딩|전파|유실|오염|초기화)|(?:threadlocal|테넌트\\s*컨텍스트).{0,250}(?:재사용|바인딩|전파|유실|오염|초기화).{0,250}(?:캐리어\\s*스레드|carrier\\s*thread))");
+    private static final Pattern CARRIER_THREAD_LOCAL_CAUSAL_ASSERTION = Pattern.compile(
+            "(?is)(?:(?:캐리어\\s*스레드|carrier\\s*thread).{0,250}(?:threadlocal|테넌트\\s*컨텍스트).{0,250}(?:재사용|바인딩|전파|유실|오염|초기화)"
+                    + "|(?:threadlocal|테넌트\\s*컨텍스트).{0,250}(?:재사용|바인딩|전파|유실|오염|초기화).{0,250}(?:캐리어\\s*스레드|carrier\\s*thread)"
+                    + "|carrier\\s*thread[^.!?\\r\\n]{0,120}" + NOT_NEGATED_CAUSAL_VERB
+                    + "(?:reuse(?:d|s)?|retain(?:ed|s)?|propagat(?:ed|es)|carried|leak(?:ed|s)?)\\s+"
+                    + "(?:a\\s+)?(?:stale\\s+|contaminated\\s+|corrupted\\s+)?threadlocal(?:\\s+state)?)"
+    );
 
     private AnswerGroundingValidator() {
     }
@@ -26,19 +44,19 @@ public final class AnswerGroundingValidator {
         Set<String> missingLines = new LinkedHashSet<>(citedLines);
         missingLines.removeAll(evidenceLines.keySet());
         if (!missingLines.isEmpty()) {
-            warnings.add("답변이 실제 로그에 없는 근거 번호를 인용했습니다: " + String.join(", ", missingLines));
+            warnings.add(ErrorPurifierBundle.message("grounding.missingEvidence", String.join(", ", missingLines)));
         }
 
         boolean hasExecutionMetadata = refinedLog != null && refinedLog.contains("[실행 환경 메타데이터");
         boolean tiesExitCodeToFailure = EXIT_TO_CAUSAL_ASSERTION.matcher(answer).find();
         if (hasExecutionMetadata && tiesExitCodeToFailure) {
-            warnings.add("실행 환경 종료 코드를 오류와 연결했습니다. 이 로그만으로 종료 원인은 알 수 없으며 별도 애플리케이션 종료 로그가 필요합니다.");
+            warnings.add(ErrorPurifierBundle.message("grounding.exitCode"));
         }
         if (refinedLog != null && NORMAL_OUTCOME.matcher(refinedLog).find() && tiesExitCodeToFailure) {
-            warnings.add("로그의 정상 처리 신호와 비정상 종료 단정이 상충할 수 있습니다.");
+            warnings.add(ErrorPurifierBundle.message("grounding.normalConflict"));
         }
         if (hasCrossTenantCacheEvidence(refinedLog) && CARRIER_THREAD_LOCAL_CAUSAL_ASSERTION.matcher(answer).find()) {
-            warnings.add("서로 다른 테넌트가 같은 캐시 결과를 참조한 로그에서는 캐시 키 격리가 1차 의심입니다. carrier thread 이름만으로 ThreadLocal 오염을 원인으로 단정할 수 없습니다.");
+            warnings.add(ErrorPurifierBundle.message("grounding.crossTenantCache"));
         }
         return List.copyOf(warnings);
     }

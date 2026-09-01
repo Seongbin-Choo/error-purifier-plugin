@@ -1,5 +1,6 @@
 package com.errorpurifier.action;
 
+import com.errorpurifier.ErrorPurifierBundle;
 import com.errorpurifier.service.ApiService;
 import com.errorpurifier.service.ApiKeyStore;
 import com.errorpurifier.service.ErrorPurifierSettings;
@@ -8,6 +9,7 @@ import com.errorpurifier.service.AnswerGroundingValidator;
 import com.errorpurifier.service.EvidenceLineExtractor;
 import com.errorpurifier.service.LlmClientService;
 import com.errorpurifier.service.LlmProvider;
+import com.errorpurifier.service.PrivacyConsentService;
 import com.errorpurifier.service.UserMessageFormatter;
 import com.errorpurifier.ui.ErrorPurifierToolWindowFactory;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -42,34 +44,44 @@ public class PurifyErrorLogAction extends AnAction {
         Document document = editor.getDocument();
         String fullLog = document.getText();
         String selectedText = selectionModel.hasSelection() ? selectionModel.getSelectedText() : null;
-        String rawLog = fullLog.length() <= 100_000 ? fullLog
-                : (selectedText != null && !selectedText.isBlank() ? selectedText : fullLog);
+        AnalysisInput input = selectAnalysisInput(fullLog, selectedText);
+        String rawLog = input.rawLog();
         if (rawLog == null || rawLog.isBlank()) {
-            Messages.showWarningDialog(project, "분석할 콘솔 로그가 없습니다.", "AI Error Purifier");
+            Messages.showWarningDialog(project, ErrorPurifierBundle.message("action.warning.emptyLog"),
+                    ErrorPurifierBundle.message("plugin.title"));
             return;
         }
         if (rawLog.length() > 100_000) {
-            Messages.showWarningDialog(project, "로그가 너무 깁니다. 핵심 오류 영역을 선택한 뒤 다시 실행하세요.", "AI Error Purifier");
+            Messages.showWarningDialog(project, ErrorPurifierBundle.message("action.warning.logTooLong"),
+                    ErrorPurifierBundle.message("plugin.title"));
             return;
         }
+        if (!PrivacyConsentService.scheduleWithConsent(project, () -> startAnalysis(project, input))) {
+            return;
+        }
+    }
 
-        showToolWindow(project, panel -> panel.showLoading(selectedText != null && !selectedText.isBlank()));
+    private void startAnalysis(Project project, AnalysisInput input) {
+        String rawLog = input.rawLog();
+        showToolWindow(project, panel -> panel.showLoading(input.selectedText() != null));
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
-                ApiService.PreparedPrompt response = apiService.preparePrompt(project, rawLog, selectedText);
+                ApiService.PreparedPrompt response = apiService.preparePrompt(project, rawLog, input.selectedText());
                 showToolWindow(project, panel -> panel.setRefinedLog(response.refinedLog()));
                 if (!response.analysisReady()) {
-                    showToolWindow(project, panel -> panel.showInsufficientLog(response.guidance()));
+                    showToolWindow(project, panel -> panel.showInsufficientLog(response.localizedGuidance()));
                     return;
                 }
                 ErrorPurifierSettings settings = ErrorPurifierSettings.getInstance();
                 LlmProvider provider = settings.selectedProvider();
                 String apiKey = ApiKeyStore.get(provider)
                         .filter(key -> !key.isBlank())
-                        .orElseThrow(() -> new IllegalStateException(provider.displayName() + " API 키를 Settings > Tools > AI Error Purifier에 등록하세요."));
+                        .orElseThrow(() -> new IllegalStateException(
+                                ErrorPurifierBundle.message("action.error.apiKeyMissing", provider.displayName())));
                 String model = settings.resolvedModel();
                 AnalysisMode analysisMode = settings.selectedAnalysisMode();
-                String analysisPrompt = response.preparedPrompt() + "\n\n[분석 모드: " + analysisMode.displayName() + "]\n"
+                String analysisPrompt = response.preparedPrompt() + "\n\n"
+                        + ErrorPurifierBundle.message("action.prompt.modeHeader", analysisMode.displayName()) + "\n"
                         + analysisMode.promptInstruction();
 
                 showToolWindow(project, panel -> panel.startStreaming(provider, model, analysisMode));
@@ -116,11 +128,23 @@ public class PurifyErrorLogAction extends AnAction {
                 }
             } catch (Exception exception) {
                 ApplicationManager.getApplication().invokeLater(() ->
-                        Messages.showErrorDialog(project, "오류 분석 요청에 실패했습니다.\n"
-                                + UserMessageFormatter.analysisFailure(exception), "AI Error Purifier")
+                        Messages.showErrorDialog(project,
+                                ErrorPurifierBundle.message("action.error.analysisFailed",
+                                        UserMessageFormatter.analysisFailure(exception)),
+                                ErrorPurifierBundle.message("plugin.title"))
                 );
             }
         });
+    }
+
+    static AnalysisInput selectAnalysisInput(String fullLog, String selectedText) {
+        if (selectedText != null && !selectedText.isBlank()) {
+            return new AnalysisInput(selectedText, selectedText);
+        }
+        return new AnalysisInput(fullLog, null);
+    }
+
+    record AnalysisInput(String rawLog, String selectedText) {
     }
 
     /**

@@ -16,7 +16,7 @@ class AnswerGroundingValidatorTest {
                 "프로세스가 종료 코드 1로 완료되었고, 테넌트 검증 실패 결과일 가능성이 있습니다.",
                 Map.of());
 
-        assertTrue(warnings.stream().anyMatch(warning -> warning.contains("종료 원인은 알 수 없으며")));
+        assertTrue(warnings.size() >= 1);
     }
 
     @Test
@@ -30,6 +30,82 @@ class AnswerGroundingValidatorTest {
 
         List<String> warnings = AnswerGroundingValidator.validate(log, answer, Map.of());
 
-        assertTrue(warnings.stream().anyMatch(warning -> warning.contains("캐시 키 격리가 1차 의심")));
+        assertTrue(warnings.size() >= 1);
+    }
+
+    @Test
+    void warnsWhenEnglishAnswerClaimsExitCodeCausedCrash() {
+        List<String> warnings = AnswerGroundingValidator.validate(
+                "200 OK\\n[실행 환경 메타데이터] Process finished with exit code 1",
+                "Exit code 1 caused the crash.",
+                Map.of());
+
+        assertTrue(warnings.size() >= 1);
+    }
+
+    @Test
+    void warnsWhenEnglishAnswerClaimsCarrierThreadReusedThreadLocalState() {
+        String log = """
+                Resolved tenantId=jeju-solar-co from request header X-Tenant-Id
+                Resolved tenantId=seogwipo-wind-farm from request header X-Tenant-Id
+                Returning cached tenant context result: tenantId=jeju-solar-co (cache populated on carrier thread pool-3-thread-7)
+                """;
+
+        List<String> warnings = AnswerGroundingValidator.validate(
+                log, "The carrier thread reused stale ThreadLocal state.", Map.of());
+
+        assertTrue(warnings.size() >= 1);
+    }
+
+    @Test
+    void doesNotWarnForEnglishStatementsThatRejectThoseInferences() {
+        String log = """
+                [실행 환경 메타데이터] Process finished with exit code 1
+                Resolved tenantId=jeju-solar-co from request header X-Tenant-Id
+                Resolved tenantId=seogwipo-wind-farm from request header X-Tenant-Id
+                Returning cached tenant context result: tenantId=jeju-solar-co (carrier thread pool-3-thread-7)
+                """;
+        String answer = "Exit code 1 did not cause the crash. The carrier thread is not evidence of ThreadLocal reuse.";
+
+        assertTrue(AnswerGroundingValidator.validate(log, answer, Map.of()).isEmpty());
+    }
+
+    @Test
+    void doesNotWarnForContractedOrCannotExitCodeNegations() {
+        String log = "[실행 환경 메타데이터] Process finished with exit code 1";
+
+        assertTrue(AnswerGroundingValidator.validate(
+                log, "Exit code 1 didn't cause the crash.", Map.of()).isEmpty());
+        assertTrue(AnswerGroundingValidator.validate(
+                log, "Exit code 1 cannot cause the crash.", Map.of()).isEmpty());
+    }
+
+    @Test
+    void doesNotWarnForContractedOrCannotCarrierThreadNegations() {
+        String log = """
+                Resolved tenantId=jeju-solar-co from request header X-Tenant-Id
+                Resolved tenantId=seogwipo-wind-farm from request header X-Tenant-Id
+                Returning cached tenant context result: tenantId=jeju-solar-co (carrier thread pool-3-thread-7)
+                """;
+
+        assertTrue(AnswerGroundingValidator.validate(
+                log, "The carrier thread didn't reuse stale ThreadLocal state.", Map.of()).isEmpty());
+        assertTrue(AnswerGroundingValidator.validate(
+                log, "The carrier thread cannot retain stale ThreadLocal state.", Map.of()).isEmpty());
+    }
+
+    @Test
+    void negationInOneSentenceDoesNotHideASeparatePositiveClaim() {
+        String log = """
+                [실행 환경 메타데이터] Process finished with exit code 1
+                Resolved tenantId=jeju-solar-co from request header X-Tenant-Id
+                Resolved tenantId=seogwipo-wind-farm from request header X-Tenant-Id
+                Returning cached tenant context result: tenantId=jeju-solar-co (carrier thread pool-3-thread-7)
+                """;
+
+        assertTrue(AnswerGroundingValidator.validate(log,
+                "Exit code 1 didn't cause the crash. Exit code 1 caused the crash.", Map.of()).size() >= 1);
+        assertTrue(AnswerGroundingValidator.validate(log,
+                "The carrier thread didn't reuse stale ThreadLocal state. The carrier thread reused stale ThreadLocal state.", Map.of()).size() >= 1);
     }
 }

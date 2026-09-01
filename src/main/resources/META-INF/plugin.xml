@@ -1,28 +1,44 @@
 <idea-plugin>
   <id>com.jcms.errorpurifier.plugin</id>
   <name>AI Error Log Purifier</name>
-  <vendor>Error Purifier</vendor>
+  <resource-bundle>messages.ErrorPurifierBundle</resource-bundle>
+  <vendor email="sxxxxxbin@gmail.com" url="https://github.com/Seongbin-Choo/error-purifier-plugin">Error Purifier</vendor>
   <description><![CDATA[
-      An IntelliJ plugin that prepares error logs for AI analysis while minimizing unnecessary context and token usage.<br>
-      콘솔 오류 로그와 프로젝트 환경을 정제해, 사용자가 선택한 AI에 바로 보낼 프롬프트를 만드는 IntelliJ 플러그인입니다.<br>
-      불필요한 스택 트레이스를 줄이고 재사용 가능한 정제 프로세스를 적용해 AI 토큰 사용량을 낮춥니다.
+      <p><strong>AI Error Log Purifier</strong> prepares IntelliJ IDEA console errors for analysis by a user-selected LLM provider.</p>
+      <p>It can:</p>
+      <ul>
+        <li>Analyze selected console output or the full console log.</li>
+        <li>Ask a separately running Error Purifier backend to mask sensitive values, compress repeated log entries, and prepare a focused prompt.</li>
+        <li>Stream responses from supported OpenAI, Google Gemini, and Anthropic models.</li>
+        <li>Show the prepared log, token usage, response time, and compression savings in the tool window.</li>
+      </ul>
+      <p><strong>Requirements:</strong> IntelliJ IDEA 2026.2 or later, a separately deployed self-hosted Error Purifier backend, and credentials supplied by the user for the selected LLM provider. The backend is not bundled and no vendor-operated service is provided. Follow the <a href="https://github.com/Seongbin-Choo/errorPurifier#self-hosted-quick-start">Docker Compose Quick Start</a>, then configure the backend URL, LLM provider, model, analysis mode, and API key under <em>Settings | Tools | AI Error Purifier</em>. Marketplace reviewers can use the <a href="https://github.com/Seongbin-Choo/error-purifier-plugin/blob/main/MARKETPLACE_REVIEW.md">review guide</a>.</p>
+      <p><strong>Data flow:</strong> console log content, filtered build-file metadata, and basic plugin environment tags are sent to the backend configured by the user for masking, compression, and prompt preparation. When console text is selected, only that selection is sent as log content. The prepared prompt is then sent directly from the IDE to the LLM provider selected by the user. Request usage and user-submitted feedback metrics are reported to the configured backend. A server-issued persistent device UUID is stored in the IntelliJ configuration directory. Client synchronization includes that identifier and the plugin version; subsequent backend requests use the UUID to associate usage and feedback. The provider API key is stored in IntelliJ PasswordSafe and is not sent to the Error Purifier backend.</p>
+      <p>The plugin requires explicit consent before backend or LLM network operations, including analysis, provider connection tests, usage-summary requests, and feedback. Current consent is checked again immediately before each HTTP transmission. See the <a href="https://github.com/Seongbin-Choo/error-purifier-plugin/blob/main/PRIVACY.md">Privacy Policy</a> for the complete data, storage, retention, and revocation details.</p>
+      <p>Users are responsible for running the self-hosted backend and for supplying credentials for their selected LLM provider.</p>
     ]]></description>
+  <change-notes><![CDATA[
+      <h3>1.0.0</h3>
+      <ul>
+        <li>Initial Marketplace release.</li>
+        <li>Added console log sanitization, repeated-log compression, and AI-assisted error analysis.</li>
+        <li>Added streaming support for OpenAI, Google Gemini, and Anthropic providers.</li>
+        <li>Added prepared-log and usage views, including token and compression statistics.</li>
+      </ul>
+    ]]></change-notes>
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.modules.java</depends>
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="AI Error Purifier"
                 anchor="right"
-                icon="AllIcons.General.Modified"
+                icon="/icons/errorPurifierToolWindow.svg"
                 factoryClass="com.errorpurifier.ui.ErrorPurifierToolWindowFactory"/>
     <applicationConfigurable parentId="tools"
-                             instance="com.errorpurifier.service.ErrorPurifierConfigurable"
-                             displayName="AI Error Purifier"/>
+                             instance="com.errorpurifier.service.ErrorPurifierConfigurable"/>
   </extensions>
   <actions>
     <action id="PurifyErrorLogAction"
-            class="com.errorpurifier.action.PurifyErrorLogAction"
-            text="에러 로그 AI 분석 (비용 최적화)"
-            description="선택한 에러 로그를 정제하여 AI에게 분석을 요청합니다.">
+            class="com.errorpurifier.action.PurifyErrorLogAction">
       <add-to-group group-id="ConsoleEditorPopupMenu" anchor="last"/>
     </action>
   </actions>

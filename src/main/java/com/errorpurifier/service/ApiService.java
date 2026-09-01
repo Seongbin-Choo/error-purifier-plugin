@@ -1,5 +1,6 @@
 package com.errorpurifier.service;
 
+import com.errorpurifier.ErrorPurifierBundle;
 import com.errorpurifier.util.DeviceAuthManager;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
@@ -22,10 +23,14 @@ import java.util.Map;
 public class ApiService {
 
     private static final String PLUGIN_VERSION = "1.0.0";
-    private final HttpClient httpClient;
+    private final ConsentAwareHttpSender httpSender;
 
     public ApiService() {
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        this(ConsentAwareHttpSender.using(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()));
+    }
+
+    ApiService(ConsentAwareHttpSender httpSender) {
+        this.httpSender = httpSender;
     }
 
     public PreparedPrompt preparePrompt(Project project, String rawLog, String selectedText) throws Exception {
@@ -37,6 +42,10 @@ public class ApiService {
         body.add("environmentTags", mapValue(ProjectContextCollector.environmentTags()));
 
         JsonObject response = post("/prompt/prepare", body, deviceId);
+        return parsePreparedPrompt(response);
+    }
+
+    static PreparedPrompt parsePreparedPrompt(JsonObject response) {
         boolean analysisReady = response.get("analysisReady").getAsBoolean();
         Map<String, Integer> appliedRuleCounts = new LinkedHashMap<>();
         if (response.has("appliedRuleCounts") && response.get("appliedRuleCounts").isJsonObject()) {
@@ -57,6 +66,8 @@ public class ApiService {
                 response.has("refinedCharacters") ? response.get("refinedCharacters").getAsInt() : response.get("preparedCharacters").getAsInt(),
                 response.get("preparedCharacters").getAsInt(),
                 analysisReady,
+                response.has("guidanceCode") && !response.get("guidanceCode").isJsonNull()
+                        ? response.get("guidanceCode").getAsString() : null,
                 response.has("guidance") && !response.get("guidance").isJsonNull() ? response.get("guidance").getAsString() : null,
                 response.has("logTruncated") && response.get("logTruncated").getAsBoolean(),
                 Map.copyOf(appliedRuleCounts),
@@ -171,10 +182,12 @@ public class ApiService {
             requestBuilder.header("X-Device-UUID", deviceId);
         }
 
-        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpSender.sendString(requestBuilder.build());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String prefix = response.statusCode() == 429 ? "요청 한도 초과: " : "서버 요청 실패 (" + response.statusCode() + "): ";
-            throw new ApiException(response.statusCode(), prefix + extractBackendMessage(response.body()));
+            String message = response.statusCode() == 429
+                    ? ErrorPurifierBundle.message("api.error.rateLimit", extractBackendMessage(response.body()))
+                    : ErrorPurifierBundle.message("api.error.request", response.statusCode(), extractBackendMessage(response.body()));
+            throw new ApiException(response.statusCode(), message);
         }
         if (response.body() == null || response.body().isBlank()) {
             return new JsonObject();
@@ -182,7 +195,7 @@ public class ApiService {
         try {
             return JsonParser.parseString(response.body()).getAsJsonObject();
         } catch (RuntimeException exception) {
-            throw new ApiException(response.statusCode(), "서버가 JSON 응답을 반환하지 않았습니다.");
+            throw new ApiException(response.statusCode(), ErrorPurifierBundle.message("api.error.invalidJson"));
         }
     }
 
@@ -221,16 +234,29 @@ public class ApiService {
         try {
             return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception exception) {
-            throw new IllegalStateException("프롬프트 해시를 만들 수 없습니다.", exception);
+            throw new IllegalStateException(ErrorPurifierBundle.message("api.error.promptHash"), exception);
         }
     }
 
     public record PreparedPrompt(boolean cacheHit, String cacheKey, String exceptionType,
                                  String preparedPrompt, String refinedLog, int originalCharacters, int refinedCharacters, int preparedCharacters,
-                                 boolean analysisReady, String guidance, boolean logTruncated,
+                                 boolean analysisReady, String guidanceCode, String guidance, boolean logTruncated,
                                  Map<String, Integer> appliedRuleCounts, int protectedLineCount, int repeatedBlockCount,
                                  int omittedRepeatBlockCount, int repeatCompressionCharacters,
                                  List<String> diagnosticPlaybooks) {
+
+        public String localizedGuidance() {
+            String messageKey = guidanceMessageKey();
+            return messageKey == null ? guidance : ErrorPurifierBundle.message(messageKey);
+        }
+
+        String guidanceMessageKey() {
+            return switch (guidanceCode == null ? "" : guidanceCode) {
+                case "BUILD_WRAPPER_ONLY" -> "guidance.buildWrapperOnly";
+                case "NO_ACTIONABLE_LOG" -> "guidance.noActionableLog";
+                default -> null;
+            };
+        }
     }
 
     public record UsageSummary(long totalRequests, long helpfulResponses, long unhelpfulResponses,

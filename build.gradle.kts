@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.errorpurifier"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
 
 repositories {
   mavenCentral()
@@ -60,5 +60,11 @@ intellijPlatform {
 tasks {
   test {
     useJUnitPlatform()
+  }
+
+  processResources {
+    from(rootProject.file("LICENSE")) {
+      into("META-INF")
+    }
   }
 }
