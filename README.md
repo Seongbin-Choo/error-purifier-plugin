@@ -71,11 +71,11 @@ LLM 제공자 사용량은 사용자의 계정 정책에 따라 비용이 발생
 
 ### 2. 플러그인 설치
 
-[GitHub v1.0.0 Release](https://github.com/Seongbin-Choo/error-purifier-plugin/releases/tag/v1.0.0)에서 서명된 ZIP을 내려받습니다.
+GitHub v1.0.2 Release의 [Marketplace 승인 배포본 ZIP](https://github.com/Seongbin-Choo/error-purifier-plugin/releases/download/v1.0.2/error-purifier-plugin-1.0.2.zip)을 내려받습니다.
 
 1. IntelliJ에서 `Settings > Plugins`를 엽니다.
 2. 톱니바퀴 메뉴의 `Install Plugin from Disk...`를 선택합니다.
-3. `error-purifier-plugin-1.0.0-signed.zip`을 선택합니다.
+3. `error-purifier-plugin-1.0.2.zip`을 선택합니다.
 4. 안내가 표시되면 IntelliJ를 재시작합니다.
 
 ### 3. 플러그인 설정
@@ -115,7 +115,7 @@ GitHub Actions는 push와 pull request마다 JDK 25 환경에서 다음 항목�
 - IntelliJ IDEA 2026.2.1 바이너리 호환성
 - Marketplace ZIP 패키징
 
-`v1.0.0`은 자동 테스트 33개, `verifyPluginProjectConfiguration`, `verifyPluginStructure`, Plugin Verifier 호환성 검사, 공식 JetBrains Marketplace ZIP Signer CLI 서명 검증을 통과했습니다.
+`v1.0.2`는 자동 테스트 35개, `verifyPluginProjectConfiguration`, `verifyPluginStructure`, Plugin Verifier 호환성 검사, Marketplace ZIP 패키징 검증을 통과했으며 JetBrains Marketplace에서 승인·공개되었습니다. 공개된 1.0.2 아티팩트는 IntelliJ IDEA 2026.3 EAP(`263.3889.65`)과 호환되며, 검증 시 차단하지 않는 deprecated API 사용 1건이 보고되었습니다. 현재 소스에서는 해당 사용을 제거했지만, 이 변경은 이미 공개된 1.0.2 ZIP에는 포함되지 않습니다.
 
 ## 관련 문서
 
