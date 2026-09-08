@@ -1,6 +1,6 @@
 # JetBrains Marketplace Listing Copy
 
-This file contains release-ready copy and an asset checklist for AI Error Log Purifier 1.0.0. Verify every link and replace the marked support-email placeholder before submission.
+This file contains release-ready copy and an asset checklist for AI Error Log Purifier 1.0.2.
 
 ## Short description
 
@@ -27,7 +27,7 @@ Supported IDE: IntelliJ IDEA 2026.2 or later (build 262 or later).
 
 ## Privacy disclosure
 
-With explicit user consent, selected console text—or the full console log when nothing is selected—plus filtered project metadata is sent to the backend configured by the user for best-effort masking, repeated-log compression, and prompt preparation. The prepared prompt and analysis-mode instruction are then sent directly from the IDE to the selected LLM provider. A persistent device UUID and usage or user-submitted feedback metadata are sent to the configured backend.
+With explicit user consent, up to 1,000,000 characters of selected console text—or the full console log when nothing is selected—plus filtered project metadata is sent to the backend configured by the user for best-effort masking, repeated-log compression, error-focused trimming, and prompt preparation. Larger log payloads are rejected before transmission. The prepared prompt and analysis-mode instruction are then sent directly from the IDE to the selected LLM provider. A persistent device UUID and usage or user-submitted feedback metadata are sent to the configured backend.
 
 The provider API key is stored in IntelliJ PasswordSafe and is sent to the selected LLM provider, not to the Error Purifier backend. Masking is best-effort, so users should review logs and avoid submitting data they are not authorized to disclose.
 
