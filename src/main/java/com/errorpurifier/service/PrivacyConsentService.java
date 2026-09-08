@@ -10,7 +10,7 @@ import java.util.function.BooleanSupplier;
 
 public final class PrivacyConsentService {
 
-    public static final String CURRENT_POLICY_VERSION = "2026-08-31";
+    public static final String CURRENT_POLICY_VERSION = "2026-09-08";
     public static final String POLICY_URL = "https://github.com/Seongbin-Choo/error-purifier-plugin/blob/main/PRIVACY.md";
 
     private PrivacyConsentService() {

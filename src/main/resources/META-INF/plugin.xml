@@ -13,11 +13,21 @@
         <li>Show the prepared log, token usage, response time, and compression savings in the tool window.</li>
       </ul>
       <p><strong>Requirements:</strong> IntelliJ IDEA 2026.2 or later, a separately deployed self-hosted Error Purifier backend, and credentials supplied by the user for the selected LLM provider. The backend is not bundled and no vendor-operated service is provided. Follow the <a href="https://github.com/Seongbin-Choo/errorPurifier#self-hosted-quick-start">Docker Compose Quick Start</a>, then configure the backend URL, LLM provider, model, analysis mode, and API key under <em>Settings | Tools | AI Error Purifier</em>. Marketplace reviewers can use the <a href="https://github.com/Seongbin-Choo/error-purifier-plugin/blob/main/MARKETPLACE_REVIEW.md">review guide</a>.</p>
-      <p><strong>Data flow:</strong> console log content, filtered build-file metadata, and basic plugin environment tags are sent to the backend configured by the user for masking, compression, and prompt preparation. When console text is selected, only that selection is sent as log content. The prepared prompt is then sent directly from the IDE to the LLM provider selected by the user. Request usage and user-submitted feedback metrics are reported to the configured backend. A server-issued persistent device UUID is stored in the IntelliJ configuration directory. Client synchronization includes that identifier and the plugin version; subsequent backend requests use the UUID to associate usage and feedback. The provider API key is stored in IntelliJ PasswordSafe and is not sent to the Error Purifier backend.</p>
+      <p><strong>Data flow:</strong> up to 1,000,000 characters of console log content, filtered build-file metadata, and basic plugin environment tags are sent to the backend configured by the user for masking, compression, focusing, and prompt preparation. When console text is selected, only that selection is sent as log content. The prepared prompt is then sent directly from the IDE to the LLM provider selected by the user. Request usage and user-submitted feedback metrics are reported to the configured backend. A server-issued persistent device UUID is stored in the IntelliJ configuration directory. Client synchronization includes that identifier and the plugin version; subsequent backend requests use the UUID to associate usage and feedback. The provider API key is stored in IntelliJ PasswordSafe and is not sent to the Error Purifier backend.</p>
       <p>The plugin requires explicit consent before backend or LLM network operations, including analysis, provider connection tests, usage-summary requests, and feedback. Current consent is checked again immediately before each HTTP transmission. See the <a href="https://github.com/Seongbin-Choo/error-purifier-plugin/blob/main/PRIVACY.md">Privacy Policy</a> for the complete data, storage, retention, and revocation details.</p>
       <p>Users are responsible for running the self-hosted backend and for supplying credentials for their selected LLM provider.</p>
     ]]></description>
   <change-notes><![CDATA[
+      <h3>1.0.2</h3>
+      <ul>
+        <li>Raised the console-log safety limit to 1,000,000 characters for realistic Spring and IntelliJ debug output.</li>
+        <li>Kept LLM input bounded through backend masking, repeated-log compression, and error-focused trimming.</li>
+        <li>Updated privacy disclosures and required consent again for the increased possible transfer size.</li>
+      </ul>
+      <h3>1.0.1</h3>
+      <ul>
+        <li>Replaced the default template logo with a custom Error Purifier plugin logo.</li>
+      </ul>
       <h3>1.0.0</h3>
       <ul>
         <li>Initial Marketplace release.</li>

@@ -3,7 +3,9 @@ package com.errorpurifier.action;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PurifyErrorLogActionTest {
 
@@ -38,5 +40,15 @@ class PurifyErrorLogActionTest {
 
         assertEquals("full console log", input.rawLog());
         assertNull(input.selectedText());
+    }
+
+    @Test
+    void acceptsLogAtOneMillionCharacterBoundary() {
+        assertFalse(PurifyErrorLogAction.exceedsLogPayloadLimit("x".repeat(1_000_000)));
+    }
+
+    @Test
+    void rejectsLogAboveOneMillionCharacterBoundary() {
+        assertTrue(PurifyErrorLogAction.exceedsLogPayloadLimit("x".repeat(1_000_001)));
     }
 }

@@ -29,6 +29,8 @@ import java.util.Map;
 
 public class PurifyErrorLogAction extends AnAction {
 
+    static final int MAX_LOG_PAYLOAD_CHARACTERS = 1_000_000;
+
     private final ApiService apiService = new ApiService();
     private final LlmClientService llmClientService = new LlmClientService();
 
@@ -51,7 +53,7 @@ public class PurifyErrorLogAction extends AnAction {
                     ErrorPurifierBundle.message("plugin.title"));
             return;
         }
-        if (rawLog.length() > 100_000) {
+        if (exceedsLogPayloadLimit(rawLog)) {
             Messages.showWarningDialog(project, ErrorPurifierBundle.message("action.warning.logTooLong"),
                     ErrorPurifierBundle.message("plugin.title"));
             return;
@@ -142,6 +144,10 @@ public class PurifyErrorLogAction extends AnAction {
             return new AnalysisInput(selectedText, selectedText);
         }
         return new AnalysisInput(fullLog, null);
+    }
+
+    static boolean exceedsLogPayloadLimit(String log) {
+        return log != null && log.length() > MAX_LOG_PAYLOAD_CHARACTERS;
     }
 
     record AnalysisInput(String rawLog, String selectedText) {

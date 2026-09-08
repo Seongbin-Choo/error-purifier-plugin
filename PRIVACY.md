@@ -1,6 +1,6 @@
 # AI Error Log Purifier Privacy Policy
 
-Effective date and policy version: August 31, 2026 (`2026-08-31`)
+Effective date and policy version: September 8, 2026 (`2026-09-08`)
 
 This policy describes the data handled by the AI Error Log Purifier IntelliJ plugin. The plugin has no central vendor-operated backend by default. Its default backend URL is local, and users configure and operate the separate [self-hosted Error Purifier backend](https://github.com/Seongbin-Choo/errorPurifier) or use one operated by an organization they trust.
 
@@ -8,9 +8,9 @@ This policy describes the data handled by the AI Error Log Purifier IntelliJ plu
 
 When a user starts an analysis after granting consent:
 
-1. If console text is selected, only the selected text is used as the log payload. If nothing is selected, the full console content is used. In either case, a log payload over 100,000 characters is rejected and is not sent.
+1. If console text is selected, only the selected text is used as the log payload. If nothing is selected, the full console content is used. In either case, a log payload up to 1,000,000 characters may be sent to the configured backend. A larger payload is rejected by the plugin and is not sent.
 2. The plugin sends that log payload to the configured self-hosted backend together with filtered metadata from supported Gradle or Maven build files, the presence of supported Spring configuration files, and basic environment tags identifying IntelliJ and the plugin.
-3. The backend applies sensitive-value masking and repeated-log compression, then returns a prepared prompt. Masking is best-effort and may not detect every secret or personal identifier. Users should avoid submitting data that they are not authorized to disclose.
+3. The backend applies sensitive-value masking and repeated-log compression, then focuses the result around an error anchor and limits the refined log to 12,000 characters before returning a prepared prompt. Masking is best-effort and may not detect every secret or personal identifier. Users should avoid submitting data that they are not authorized to disclose.
 4. The plugin appends the selected analysis-mode instruction and sends the prepared prompt directly from the IDE to the LLM provider selected by the user: OpenAI, Google Gemini, or Anthropic.
 5. The provider's response is streamed back to the IDE. In the ordinary analysis flow, the AI answer body is not sent to or stored by the Error Purifier backend.
 

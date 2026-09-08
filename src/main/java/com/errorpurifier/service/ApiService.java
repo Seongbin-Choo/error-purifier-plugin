@@ -22,7 +22,7 @@ import java.util.Map;
 
 public class ApiService {
 
-    private static final String PLUGIN_VERSION = "1.0.0";
+    private static final String PLUGIN_VERSION = "1.0.2";
     private final ConsentAwareHttpSender httpSender;
 
     public ApiService() {
